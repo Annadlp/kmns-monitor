@@ -1,12 +1,7 @@
 {
-  "BOT_TOKEN": "СЮДА_ТОКЕН_ОТ_BOTFATHER",
-  "CHAT_ID":   "СЮДА_ТВОЙ_CHAT_ID",
-
-  "CHECK_INTERVAL": 3600,
-  "DAYS_BACK": 30,
-  "MORNING_CHECK": "08:00",
-  "QUIET_HOURS": [0, 7],
-
   "SOURCES": ["pravo", "sozd", "regulation", "fadn"],
-  "USE_ALL_KEYWORDS": false
+  "USE_ALL_KEYWORDS": false,
+  "CHECK_INTERVAL": 3600,
+  "MORNING_CHECK": "08:00",
+  "QUIET_HOURS": [0, 7]
 }
