@@ -1,0 +1,1 @@
+worker: python kmns_bot.py
