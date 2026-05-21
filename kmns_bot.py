@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-КМНС-БОТ — Telegram-уведомления о новых законодательных документах
-по коренным малочисленным народам России.
-"""
 
 import os
 import sys
@@ -36,8 +32,6 @@ def load_config():
         config.update(saved)
     return config
 
-# ── Telegram API ──────────────────────────────────────────────────────
-
 def tg_post(token, method, timeout=15, **kwargs):
     url = f"https://api.telegram.org/bot{token}/{method}"
     try:
@@ -63,8 +57,6 @@ def send_message(token, chat_id, text, parse_mode="HTML"):
         time.sleep(0.3)
 
 def get_updates(token, offset=0):
-    # ВАЖНО: requests timeout должен быть > Telegram polling timeout
-    # Telegram timeout=25, requests timeout=35
     url = f"https://api.telegram.org/bot{token}/getUpdates"
     try:
         r = requests.post(url, json={
@@ -80,23 +72,22 @@ def get_updates(token, offset=0):
         logging.error(f"get_updates error: {e}")
         return []
 
-# ── Форматирование ────────────────────────────────────────────────────
-
 SOURCE_EMOJI = {
     "pravo.gov.ru":      "📜",
     "sozd.duma.gov.ru":  "🏛",
     "regulation.gov.ru": "📋",
     "fadn.gov.ru":       "🏢",
+    "faolex.fao.org":    "🌐",
 }
 
 def format_doc(r):
     lines = [f"{SOURCE_EMOJI.get(r['источник'],'📌')} <b>{r.get('тип','')}</b>",
              r['заголовок']]
-    if r.get("статус"):  lines.append(f"Статус: <i>{r['статус']}</i>")
-    if r.get("дата"):    lines.append(f"Дата: {r['дата']}")
-    if r.get("срочно"):  lines.append("⚡ <b>ФИНАЛЬНАЯ СТАДИЯ</b>")
+    if r.get("статус"):      lines.append(f"Статус: <i>{r['статус']}</i>")
+    if r.get("дата"):        lines.append(f"Дата: {r['дата']}")
+    if r.get("срочно"):      lines.append("⚡ <b>ФИНАЛЬНАЯ СТАДИЯ</b>")
     if r.get("открыто_для"): lines.append("📢 <b>ОТКРЫТО ДЛЯ ЗАМЕЧАНИЙ</b>")
-    if r.get("url"):     lines.append(f'<a href="{r["url"]}">→ Открыть</a>')
+    if r.get("url"):         lines.append(f'<a href="{r["url"]}">→ Открыть</a>')
     return "\n".join(lines)
 
 def format_new_docs(new_docs):
@@ -114,8 +105,6 @@ def format_new_docs(new_docs):
         if len(docs) > 5:
             parts.append(f"<i>...и ещё {len(docs)-5}</i>")
     return "\n".join(parts)
-
-# ── Обработчик команд ─────────────────────────────────────────────────
 
 _last_results = []
 
@@ -147,16 +136,17 @@ def handle_command(token, chat_id, text, config):
         new_docs = [r for r in results if r.get("новый")]
         msg = format_new_docs(new_docs)
         send_message(token, chat_id,
-    msg if msg else f"✅ Новых документов нет.\nПроверено: {len(config['SOURCES'])} + FAOLex источников")
+            msg if msg else "✅ Новых документов нет.")
 
     elif cmd == "/status":
-    from kmns_monitor import load_state
-    st = load_state() or {}
-    send_message(token, chat_id,
+        from kmns_monitor import load_state
+        st = load_state() or {}
+        send_message(token, chat_id,
             f"🤖 <b>КМНС-БОТ</b>\n\n"
             f"Последний запуск: <code>{st.get('last_run','никогда')[:16]}</code>\n"
-            f"В базе: {len(st.get('seen',{}))} документов\n"
-            f"Интервал: каждые {config['CHECK_INTERVAL']//60} мин")
+            f"В базе: {len(st.get('seen', {}))} документов\n"
+            f"Интервал: каждые {config['CHECK_INTERVAL']//60} мин\n"
+            f"Источников: {len(config['SOURCES'])} + FAOLex")
 
     elif cmd == "/digest":
         if _last_results:
@@ -168,29 +158,29 @@ def handle_command(token, chat_id, text, config):
                 if docs:
                     lines.append(f"\n{emoji} {src}: {len(docs)}")
                     for r in docs[:3]:
-                        lines.append(f"  {'★ ' if r.get('новый') else ''}{ r['заголовок'][:60]}")
+                        lines.append(f"  {'★ ' if r.get('новый') else ''}{r['заголовок'][:60]}")
             send_message(token, chat_id, "\n".join(lines))
         else:
             send_message(token, chat_id, "Нет данных — запусти /check")
 
     elif cmd == "/sources":
-    send_message(token, chat_id,
-        "📚 <b>Источники мониторинга</b>\n\n"
-        "📜 <b>pravo.gov.ru</b>\n"
-        "Принятые НПА: федеральные законы, указы Президента, постановления Правительства.\n\n"
-        "🏛 <b>sozd.duma.gov.ru</b>\n"
-        "Все законопроекты от внесения до подписания. Главный источник для отслеживания.\n\n"
-        "📋 <b>regulation.gov.ru</b>\n"
-        "Проекты НПА до внесения в Думу. Можно подать замечания в рамках ОРВ. Ищи флаг 📢\n\n"
-        "🏢 <b>fadn.gov.ru</b>\n"
-        "Новости и документы Федерального агентства по делам национальностей.\n\n"
-        "🌐 <b>faolex.fao.org</b>\n"
-        "База данных ФАО — федеральное и региональное законодательство РФ по природным ресурсам, "
-        "землепользованию и правам коренных народов. Включает законы субъектов РФ.")
+        send_message(token, chat_id,
+            "📚 <b>Источники мониторинга</b>\n\n"
+            "📜 <b>pravo.gov.ru</b>\n"
+            "Принятые НПА: федеральные законы, указы Президента, постановления Правительства.\n\n"
+            "🏛 <b>sozd.duma.gov.ru</b>\n"
+            "Все законопроекты от внесения до подписания. Главный источник для отслеживания.\n\n"
+            "📋 <b>regulation.gov.ru</b>\n"
+            "Проекты НПА до внесения в Думу. Можно подать замечания в рамках ОРВ. Ищи флаг 📢\n\n"
+            "🏢 <b>fadn.gov.ru</b>\n"
+            "Новости и документы Федерального агентства по делам национальностей.\n\n"
+            "🌐 <b>faolex.fao.org</b>\n"
+            "База данных ФАО — федеральное и региональное законодательство РФ "
+            "по природным ресурсам, землепользованию и правам коренных народов. "
+            "Включает законы субъектов Арктики.")
+
     else:
         send_message(token, chat_id, "Не знаю такой команды. /help")
-
-# ── Плановые задачи ───────────────────────────────────────────────────
 
 def scheduled_check(token, chat_id, config):
     global _last_results
@@ -211,8 +201,6 @@ def scheduled_check(token, chat_id, config):
         logging.info(f"Отправлено: {len(new_docs)} новых")
     else:
         logging.info("Новых нет")
-
-# ── Основной цикл ─────────────────────────────────────────────────────
 
 def run_bot():
     config = load_config()
@@ -243,13 +231,13 @@ def run_bot():
     send_message(token, chat_id,
         f"✅ <b>КМНС-БОТ запущен</b>\n\n"
         f"⏰ Проверка каждые {config['CHECK_INTERVAL']//60} мин\n"
-        f"🔍 Источников: {len(config['SOURCES']) + 1} (+ FAOLex)\n\n"
+        f"🔍 Источников: pravo, sozd, regulation, fadn, FAOLex\n\n"
         "/help — команды")
 
-    offset     = 0
-    last_check = 0
+    offset       = 0
+    last_check   = 0
     last_morning = None
-    poll_count = 0
+    poll_count   = 0
 
     while True:
         try:
@@ -259,7 +247,7 @@ def run_bot():
                 logging.info(f"Polling активен. Итераций: {poll_count}")
 
             for upd in updates:
-                offset = upd["update_id"] + 1
+                offset  = upd["update_id"] + 1
                 msg     = upd.get("message", {})
                 text    = msg.get("text", "")
                 from_id = str(msg.get("chat", {}).get("id", ""))
