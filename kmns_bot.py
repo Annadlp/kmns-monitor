@@ -150,9 +150,9 @@ def handle_command(token, chat_id, text, config):
     msg if msg else f"✅ Новых документов нет.\nПроверено: {len(config['SOURCES'])} + FAOLex источников")
 
     elif cmd == "/status":
-        from kmns_monitor import load_state
-        st = load_state()
-        send_message(token, chat_id,
+    from kmns_monitor import load_state
+    st = load_state() or {}
+    send_message(token, chat_id,
             f"🤖 <b>КМНС-БОТ</b>\n\n"
             f"Последний запуск: <code>{st.get('last_run','никогда')[:16]}</code>\n"
             f"В базе: {len(st.get('seen',{}))} документов\n"
