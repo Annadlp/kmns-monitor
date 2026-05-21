@@ -147,7 +147,7 @@ def handle_command(token, chat_id, text, config):
         new_docs = [r for r in results if r.get("новый")]
         msg = format_new_docs(new_docs)
         send_message(token, chat_id,
-            msg if msg else f"✅ Новых документов нет.\nПроверено: {len(config['SOURCES'])} источника")
+    msg if msg else f"✅ Новых документов нет.\nПроверено: {len(config['SOURCES'])} + FAOLex источников")
 
     elif cmd == "/status":
         from kmns_monitor import load_state
