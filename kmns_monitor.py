@@ -32,6 +32,14 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlencode, quote
 
+# RSS/API fallback — подключаем если файл рядом
+try:
+    from kmns_rss import (fetch_with_cascade, check_sources_health,
+                           parse_faolex, faolex_indigenous_russia)
+    CASCADE_AVAILABLE = True
+except ImportError:
+    CASCADE_AVAILABLE = False
+
 # ════════════════════════════════════════════════════════════════════
 # КОНФИГУРАЦИЯ
 # ════════════════════════════════════════════════════════════════════
@@ -616,22 +624,59 @@ def run(
 
     all_results = []
 
-    # ── Сбор данных ──────────────────────────────────────────────
+    # ── Сбор данных (с каскадным fallback если доступен) ─────────
+    source_status = {}
+
     if "pravo" in sources:
         log("→ pravo.gov.ru...")
-        all_results += parse_pravo(kws, days_back)
+        if CASCADE_AVAILABLE:
+            res, status = fetch_with_cascade("pravo", parse_pravo, kws, days_back)
+            source_status["pravo.gov.ru"] = status
+        else:
+            res = parse_pravo(kws, days_back)
+        all_results += res
 
     if "sozd" in sources:
         log("→ sozd.duma.gov.ru...")
-        all_results += parse_sozd(kws, days_back)
+        if CASCADE_AVAILABLE:
+            res, status = fetch_with_cascade("sozd", parse_sozd, kws, days_back)
+            source_status["sozd.duma.gov.ru"] = status
+        else:
+            res = parse_sozd(kws, days_back)
+        all_results += res
 
     if "regulation" in sources:
         log("→ regulation.gov.ru...")
-        all_results += parse_regulation(kws, days_back)
+        if CASCADE_AVAILABLE:
+            res, status = fetch_with_cascade("regulation", parse_regulation, kws, days_back)
+            source_status["regulation.gov.ru"] = status
+        else:
+            res = parse_regulation(kws, days_back)
+        all_results += res
 
     if "fadn" in sources:
         log("→ fadn.gov.ru...")
-        all_results += parse_fadn(days_back)
+        res = parse_fadn(days_back)
+        source_status["fadn.gov.ru"] = "ok" if res else "empty"
+        all_results += res
+
+    # FAOLex — стабильный внешний источник, всегда запускаем
+    if CASCADE_AVAILABLE and "fadn" in sources:  # запускаем вместе с fadn
+        log("→ faolex.fao.org...")
+        try:
+            fao_results = faolex_indigenous_russia(days_back)
+            source_status["faolex.fao.org"] = "ok" if fao_results else "empty"
+            all_results += fao_results
+            log(f"faolex.fao.org: найдено {len(fao_results)} документов")
+        except Exception as e:
+            log(f"faolex.fao.org: ошибка — {e}", "WARN")
+            source_status["faolex.fao.org"] = "failed"
+
+    # Логируем статус источников
+    if source_status:
+        failed = [s for s, st in source_status.items() if st == "failed"]
+        if failed:
+            log(f"Недоступны: {', '.join(failed)}", "WARN")
 
     # ── Дедупликация ─────────────────────────────────────────────
     results = deduplicate(all_results, state)
