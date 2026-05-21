@@ -235,7 +235,7 @@ def run_bot():
     send_message(token, chat_id,
         f"✅ <b>КМНС-БОТ запущен</b>\n\n"
         f"⏰ Проверка каждые {config['CHECK_INTERVAL']//60} мин\n"
-        f"🔍 Источников: {len(config['SOURCES'])}\n\n"
+        f"🔍 Источников: {len(config['SOURCES']) + 1} (+ FAOLex)\n\n"
         "/help — команды")
 
     offset     = 0
