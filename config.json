@@ -1,5 +1,5 @@
 {
-  "SOURCES": ["pravo", "sozd", "regulation", "fadn"],
+  "SOURCES": ["pravo", "fadn"],
   "USE_ALL_KEYWORDS": false,
   "CHECK_INTERVAL": 3600,
   "MORNING_CHECK": "08:00",
