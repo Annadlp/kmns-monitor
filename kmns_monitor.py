@@ -118,7 +118,7 @@ def is_relevant(text):
     t = text.lower()
     return any(kw.lower() in t for kw in ALL_KEYWORDS)
 
-def safe_get(url, params=None, timeout=20, retries=2):
+def safe_get(url, params=None, timeout=60, retries=2):
     """HTTP GET с повторами и обработкой ошибок"""
     for attempt in range(retries):
         try:
@@ -360,7 +360,7 @@ def parse_regulation(keywords, days_back=60):
                 headers={**HEADERS,
                          "Content-Type": "application/json",
                          "X-Requested-With": "XMLHttpRequest"},
-                timeout=20
+                timeout=60
             )
 
             if r.status_code == 200:
