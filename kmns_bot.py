@@ -21,7 +21,7 @@ def load_config():
         "CHAT_ID":          os.getenv("KMNS_CHAT_ID", ""),
         "CHECK_INTERVAL":   int(os.getenv("KMNS_INTERVAL", "3600")),
         "DAYS_BACK":        int(os.getenv("KMNS_DAYS", "30")),
-        "SOURCES":          ["pravo", "sozd", "regulation", "fadn"],
+        "SOURCES":          ["pravo", "fadn"],
         "USE_ALL_KEYWORDS": False,
         "MORNING_CHECK":    "08:00",
         "QUIET_HOURS":      [0, 7],
@@ -74,8 +74,6 @@ def get_updates(token, offset=0):
 
 SOURCE_EMOJI = {
     "pravo.gov.ru":      "📜",
-    "sozd.duma.gov.ru":  "🏛",
-    "regulation.gov.ru": "📋",
     "fadn.gov.ru":       "🏢",
     "faolex.fao.org":    "🌐",
 }
@@ -125,7 +123,7 @@ def handle_command(token, chat_id, text, config):
             f"⏰ Автопроверка каждые {config['CHECK_INTERVAL']//60} мин.")
 
     elif cmd == "/check":
-        send_message(token, chat_id, "🔍 Проверяю... (~5 мин из-за таймаутов сайтов)")
+        send_message(token, chat_id, "🔍 Проверяю...")
         results = monitor_run(
             days_back=config["DAYS_BACK"],
             sources=tuple(config["SOURCES"]),
@@ -146,7 +144,8 @@ def handle_command(token, chat_id, text, config):
             f"Последний запуск: <code>{st.get('last_run','никогда')[:16]}</code>\n"
             f"В базе: {len(st.get('seen', {}))} документов\n"
             f"Интервал: каждые {config['CHECK_INTERVAL']//60} мин\n"
-            f"Источников: {len(config['SOURCES'])} + FAOLex")
+            f"Источников: {len(config['SOURCES'])} + FAOLex\n\n"
+            f"⚠️ sozd.duma.gov.ru и regulation.gov.ru недоступны с зарубежных серверов — проверяйте вручную.")
 
     elif cmd == "/digest":
         if _last_results:
@@ -168,16 +167,17 @@ def handle_command(token, chat_id, text, config):
             "📚 <b>Источники мониторинга</b>\n\n"
             "📜 <b>pravo.gov.ru</b>\n"
             "Принятые НПА: федеральные законы, указы Президента, постановления Правительства.\n\n"
-            "🏛 <b>sozd.duma.gov.ru</b>\n"
-            "Все законопроекты от внесения до подписания. Главный источник для отслеживания.\n\n"
-            "📋 <b>regulation.gov.ru</b>\n"
-            "Проекты НПА до внесения в Думу. Можно подать замечания в рамках ОРВ. Ищи флаг 📢\n\n"
             "🏢 <b>fadn.gov.ru</b>\n"
             "Новости и документы Федерального агентства по делам национальностей.\n\n"
             "🌐 <b>faolex.fao.org</b>\n"
             "База данных ФАО — федеральное и региональное законодательство РФ "
             "по природным ресурсам, землепользованию и правам коренных народов. "
-            "Включает законы субъектов РФ.")
+            "Включает законы субъектов РФ.\n\n"
+            "⚠️ <b>Недоступны автоматически:</b>\n"
+            "🏛 sozd.duma.gov.ru — законопроекты Госдумы\n"
+            "📋 regulation.gov.ru — проекты НПА до внесения в Думу\n"
+            "Эти сайты блокируют запросы с зарубежных серверов. "
+            "Рекомендуем проверять вручную раз в неделю.")
 
     else:
         send_message(token, chat_id, "Не знаю такой команды. /help")
@@ -231,7 +231,7 @@ def run_bot():
     send_message(token, chat_id,
         f"✅ <b>КМНС-БОТ запущен</b>\n\n"
         f"⏰ Проверка каждые {config['CHECK_INTERVAL']//60} мин\n"
-        f"🔍 Источников: pravo, sozd, regulation, fadn, FAOLex\n\n"
+        f"🔍 Источников: pravo.gov.ru, fadn.gov.ru, FAOLex\n\n"
         "/help — команды")
 
     offset       = 0
