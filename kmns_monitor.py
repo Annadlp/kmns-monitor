@@ -439,7 +439,7 @@ def parse_fadn(days_back=30):
     sections = [
         ("https://fadn.gov.ru/news/", "Новость"),
         ("https://fadn.gov.ru/documents/", "Документ"),
-        ("https://fadn.gov.ru/activity/", "Деятельность"),
+        # ("https://fadn.gov.ru/activity/", "Деятельность"),  # 404, убрано
     ]
 
     for url, section_type in sections:
