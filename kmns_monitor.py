@@ -185,6 +185,8 @@ def parse_pravo(keywords, days_back=30):
 
         for a_tag in doc_links:
             title = a_tag.get_text(strip=True)
+            if "765" in title or "налог" in title.lower():
+    log(f"DEBUG: [{ministry_name}] title = {title[:120]}", "WARN")
             if not title or len(title) < 15:
                 continue
 
