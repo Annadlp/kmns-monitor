@@ -19,6 +19,7 @@ def load_config():
     config = {
         "BOT_TOKEN":        os.getenv("KMNS_BOT_TOKEN", ""),
         "CHAT_ID":          os.getenv("KMNS_CHAT_ID", ""),
+        "ADMIN_ID":         os.getenv("KMNS_ADMIN_ID", ""),
         "CHECK_INTERVAL":   int(os.getenv("KMNS_INTERVAL", "3600")),
         "DAYS_BACK":        int(os.getenv("KMNS_DAYS", "30")),
         "SOURCES":          ["pravo", "fadn"],
@@ -30,6 +31,9 @@ def load_config():
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             saved = json.load(f)
         config.update(saved)
+    # ADMIN_ID по умолчанию = CHAT_ID если не задан отдельно
+    if not config["ADMIN_ID"]:
+        config["ADMIN_ID"] = config["CHAT_ID"]
     return config
 
 def tg_post(token, method, timeout=15, **kwargs):
@@ -105,34 +109,28 @@ def format_new_docs(new_docs, source_status=None):
             parts.append("\n" + format_doc(r))
         if len(docs) > 5:
             parts.append(f"<i>...и ещё {len(docs)-5}</i>")
-    # Предупреждение о недоступных источниках
     if source_status:
         failed = [s for s, st in source_status.items() if st == "failed"]
         if failed:
-            parts.append(f"\n⚠️ <i>Недоступны: {', '.join(failed)} — данные могут быть неполными</i>")
+            parts.append(f"\n⚠️ <i>Недоступны: {', '.join(failed)}</i>")
     return "\n".join(parts)
 
 def format_no_news(source_status=None):
-    """Честное сообщение когда новых нет — с учётом статуса источников."""
-    failed = []
-    if source_status:
-        failed = [s for s, st in source_status.items() if st == "failed"]
-
+    failed = [s for s, st in source_status.items() if st == "failed"] if source_status else []
     if failed:
         return (
             f"⚠️ <b>Проверка неполная</b>\n\n"
             f"Недоступны: {', '.join(failed)}\n"
-            f"По доступным источникам новых документов нет.\n\n"
-            f"<i>Рекомендуем проверить sozd.duma.gov.ru и regulation.gov.ru вручную.</i>"
+            f"По доступным источникам новых документов нет."
         )
     return "✅ Новых документов нет."
 
-_last_results      = []
+_last_results       = []
 _last_source_status = {}
 
-def handle_command(token, chat_id, text, config):
+def handle_command(token, chat_id, channel_id, text, config):
     global _last_results, _last_source_status
-    cmd = text.strip().lower().split()[0].split("@")[0]  # убираем @botname
+    cmd = text.strip().lower().split()[0].split("@")[0]
     logging.info(f"Команда: {cmd}")
 
     if cmd in ("/start", "/help"):
@@ -144,7 +142,8 @@ def handle_command(token, chat_id, text, config):
             "/status — статус и статистика\n"
             "/digest — последние результаты\n"
             "/sources — описание источников\n\n"
-            f"⏰ Автопроверка каждые {config['CHECK_INTERVAL']//60} мин.")
+            f"⏰ Автопроверка каждые {config['CHECK_INTERVAL']//60} мин.\n"
+            f"📢 Уведомления публикуются в канале.")
 
     elif cmd == "/check":
         send_message(token, chat_id, "🔍 Проверяю...")
@@ -158,21 +157,23 @@ def handle_command(token, chat_id, text, config):
         _last_source_status = source_status
         new_docs = [r for r in results if r.get("новый")]
         if new_docs:
-            send_message(token, chat_id, format_new_docs(new_docs, source_status))
+            msg = format_new_docs(new_docs, source_status)
+            # Новые документы отправляем в канал
+            send_message(token, channel_id, msg)
+            # Администратору сообщаем что отправили
+            send_message(token, chat_id, f"✅ Отправлено в канал: {len(new_docs)} новых документов.")
         else:
             send_message(token, chat_id, format_no_news(source_status))
 
     elif cmd == "/status":
         from kmns_monitor import load_state
         st = load_state() or {}
-        # Статус источников из последней проверки
         status_lines = ""
         if _last_source_status:
             icons = {"ok": "✅", "empty": "🔵", "failed": "❌"}
             status_lines = "\n\n<b>Статус источников:</b>\n"
             for src, s in _last_source_status.items():
                 status_lines += f"{icons.get(s,'❓')} {src}\n"
-
         send_message(token, chat_id,
             f"🤖 <b>КМНС-БОТ</b>\n\n"
             f"Последний запуск: <code>{st.get('last_run','никогда')[:16]}</code>\n"
@@ -191,10 +192,6 @@ def handle_command(token, chat_id, text, config):
                     lines.append(f"\n{emoji} {src}: {len(docs)}")
                     for r in docs[:3]:
                         lines.append(f"  {'★ ' if r.get('новый') else ''}{r['заголовок'][:60]}")
-            if _last_source_status:
-                failed = [s for s, st in _last_source_status.items() if st == "failed"]
-                if failed:
-                    lines.append(f"\n⚠️ Недоступны: {', '.join(failed)}")
             send_message(token, chat_id, "\n".join(lines))
         else:
             send_message(token, chat_id, "Нет данных — запусти /check")
@@ -203,22 +200,22 @@ def handle_command(token, chat_id, text, config):
         send_message(token, chat_id,
             "📚 <b>Источники мониторинга</b>\n\n"
             "📜 <b>pravo.gov.ru</b>\n"
-            "Принятые НПА: федеральные законы, указы Президента, постановления Правительства, приказы министерств.\n\n"
+            "Принятые НПА: федеральные законы, указы, постановления, приказы министерств.\n\n"
             "🏢 <b>fadn.gov.ru</b>\n"
-            "Новости и документы Федерального агентства по делам национальностей.\n\n"
+            "Новости и документы ФАДН.\n\n"
             "📰 <b>Google News</b>\n"
-            "Агрегатор российских СМИ и правовых сервисов. Работает с любого IP.\n\n"
+            "Агрегатор российских СМИ. Работает с любого IP.\n\n"
             "🌐 <b>faolex.fao.org</b>\n"
-            "База данных ФАО — законодательство РФ по природным ресурсам и правам коренных народов.\n\n"
+            "База данных ФАО по природным ресурсам и правам коренных народов.\n\n"
             "⚠️ <b>Недоступны автоматически:</b>\n"
-            "🏛 sozd.duma.gov.ru — законопроекты Госдумы\n"
-            "📋 regulation.gov.ru — проекты НПА до внесения в Думу\n"
-            "Эти сайты блокируют зарубежные IP. Проверяйте вручную раз в неделю.")
+            "🏛 sozd.duma.gov.ru — блокирует зарубежные IP\n"
+            "📋 regulation.gov.ru — блокирует зарубежные IP\n"
+            "Проверяйте вручную раз в неделю.")
 
     else:
         send_message(token, chat_id, "Не знаю такой команды. /help")
 
-def scheduled_check(token, chat_id, config):
+def scheduled_check(token, chat_id, channel_id, config):
     global _last_results, _last_source_status
     now = datetime.now()
     quiet = config.get("QUIET_HOURS", [0, 7])
@@ -236,10 +233,9 @@ def scheduled_check(token, chat_id, config):
 
     new_docs = [r for r in results if r.get("новый")]
     if new_docs:
-        send_message(token, chat_id, format_new_docs(new_docs, source_status))
-        logging.info(f"Отправлено: {len(new_docs)} новых")
+        send_message(token, channel_id, format_new_docs(new_docs, source_status))
+        logging.info(f"Отправлено в канал: {len(new_docs)} новых")
     else:
-        # При плановой проверке пишем только если есть проблемы с источниками
         failed = [s for s, st in source_status.items() if st == "failed"]
         if failed:
             logging.warning(f"Недоступны: {', '.join(failed)}")
@@ -258,24 +254,25 @@ def run_bot():
         logging.error("❌ Не настроены KMNS_BOT_TOKEN и/или KMNS_CHAT_ID!")
         sys.exit(1)
 
-    token   = config["BOT_TOKEN"]
-    chat_id = config["CHAT_ID"]
+    token      = config["BOT_TOKEN"]
+    channel_id = config["CHAT_ID"]    # канал — куда постим уведомления
+    admin_id   = config["ADMIN_ID"]   # админ — кто может давать команды
 
-    logging.info(f"КМНС-БОТ запущен. chat_id={chat_id}")
+    logging.info(f"КМНС-БОТ запущен. Канал: {channel_id}, Админ: {admin_id}")
 
     result = tg_post(token, "getMe")
     if result.get("ok"):
         bot_name = result["result"].get("username", "?")
         logging.info(f"Бот авторизован: @{bot_name}")
     else:
-        logging.error("❌ Токен неверный! Проверь KMNS_BOT_TOKEN")
+        logging.error("❌ Токен неверный!")
         sys.exit(1)
 
-    send_message(token, chat_id,
+    send_message(token, channel_id,
         f"✅ <b>КМНС-БОТ запущен</b>\n\n"
         f"⏰ Проверка каждые {config['CHECK_INTERVAL']//60} мин\n"
         f"🔍 Источников: pravo.gov.ru, fadn.gov.ru, Google News, FAOLex\n\n"
-        "/help — команды")
+        "Команды доступны администратору в личке бота.")
 
     offset       = 0
     last_check   = 0
@@ -297,27 +294,28 @@ def run_bot():
 
                 logging.info(f"Сообщение от {from_id}: {text[:30]}")
 
-                if from_id != str(chat_id):
-                    logging.warning(f"Чужой chat_id: {from_id} (ожидался {chat_id})")
+                # Принимаем команды только от администратора
+                if from_id != str(admin_id):
+                    logging.warning(f"Чужой id: {from_id}")
                     continue
 
                 if text.startswith("/"):
-                    handle_command(token, chat_id, text, config)
+                    handle_command(token, from_id, channel_id, text, config)
 
             now = time.time()
             if now - last_check >= config["CHECK_INTERVAL"]:
-                scheduled_check(token, chat_id, config)
+                scheduled_check(token, admin_id, channel_id, config)
                 last_check = now
 
             current_time = datetime.now().strftime("%H:%M")
             today = datetime.now().date()
             if current_time == config["MORNING_CHECK"] and last_morning != today:
-                scheduled_check(token, chat_id, config)
+                scheduled_check(token, admin_id, channel_id, config)
                 last_morning = today
 
         except KeyboardInterrupt:
             logging.info("Остановка.")
-            send_message(token, chat_id, "🛑 Бот остановлен.")
+            send_message(token, channel_id, "🛑 Бот остановлен.")
             break
         except Exception as e:
             logging.error(f"Ошибка цикла: {e}")
