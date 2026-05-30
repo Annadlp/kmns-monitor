@@ -189,10 +189,19 @@ def parse_pravo(keywords, days_back=30):
                 continue
 
             # Фильтр по ключевым словам КМНС
-            ROOTS = ["коренн", "кмнс", "малочисленн", "исконн",
-             "традиционного образа жизни",
-             "традиционное природо",
-             "традиционной хозяйственной"]
+           ROOTS = ["коренн", "кмнс", "малочисленн", "исконн",
+                 "традиционного образа жизни",
+                 "традиционное природо",
+                 "традиционной хозяйственной"]
+
+        for a_tag in doc_links:
+            title = a_tag.get_text(strip=True)
+            if not title or len(title) < 15:
+                continue
+
+            # Фильтр по корням КМНС-слов
+            if not any(root in title.lower() for root in ROOTS):
+                continue
 
             href = a_tag.get("href", "")
             if href and not href.startswith("http"):
